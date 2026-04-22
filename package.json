@@ -1,0 +1,24 @@
+{
+  "name": "oh-my-kiro",
+  "version": "0.1.0",
+  "description": "Sidecar workflow orchestration for Kiro CLI",
+  "type": "module",
+  "bin": {
+    "omk": "bin/omk.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:kiro-invoke": "node test/kiro-invocation-smoke.test.js",
+    "start": "node bin/omk.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "files": [
+    "bin/",
+    "src/",
+    "docs/",
+    "README.md"
+  ]
+}

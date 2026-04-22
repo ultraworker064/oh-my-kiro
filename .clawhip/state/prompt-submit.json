@@ -1,0 +1,8 @@
+{
+  "observed_at": "2026-04-22T06:29:16.641Z",
+  "provider": "codex",
+  "event_name": "UserPromptSubmit",
+  "session_id": "019daf93-b136-7003-8567-8c3fcbb5ed9d",
+  "turn_id": "019db3e0-efd4-7840-9e98-a9e2c30bc819",
+  "prompt_summary": "UPDATE TO YOUR CLAWHIP NOTIFICATION RULES: You were previously told to send every response or intermediate update to Discord via clawhip. STOP doing that. From now on, you must ONLY use `clawhip send …"
+}
