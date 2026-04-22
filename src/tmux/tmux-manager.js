@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_TIMEOUT_MS } from '../config/defaults.js';
 import { projectSlug } from '../workflow/id.js';
 import { omkPath, readJson, writeJson } from '../state/store.js';
+import { resolveKiroBinary, buildInteractiveKiroArgs } from '../kiro/kiro-command.js';
 
 function run(command, args, opts = {}) {
   return spawnSync(command, args, { encoding: 'utf8', ...opts });
@@ -73,6 +74,47 @@ export function waitForResult(resultPath, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const error = new Error(`Timed out waiting for stage result: ${resultPath}`);
   error.exitCode = 1;
   throw error;
+}
+
+
+export function buildInteractiveKiroCommand({ root, prompt, kiroBin }) {
+  const binary = resolveKiroBinary({ root, kiroBin });
+  if (!binary) {
+    const error = new Error('Kiro CLI not found. Run `omk setup` or pass --kiro-bin <path>.');
+    error.exitCode = 127;
+    throw error;
+  }
+  return [binary, ...buildInteractiveKiroArgs({ prompt })].map(shellQuote).join(' ');
+}
+
+export function launchInteractiveKiroInTmux({ root, workflow, task, promptPath, resultPath, donePath, kiroBin, tmuxBin, attach = false, noAttach = false, noTmux = false }) {
+  const shouldAttach = shouldAttachToTmux({ attach, noAttach, noTmux });
+  if (!shouldAttach) return { launched: false, attached: false, reason: 'disabled-or-non-interactive' };
+  const binary = resolveTmuxBinary(tmuxBin);
+  const session = sessionName(root);
+  const window = `kiro-${workflow.id.slice(0, 8)}`;
+  const prompt = `Read ${promptPath} and follow the handoff instructions for: ${task}`;
+  const kiroCommand = buildInteractiveKiroCommand({ root, prompt, kiroBin });
+  const shellCommand = `printf 'omk interactive handoff prompt: ${shellQuote(promptPath)}\nResult file: ${shellQuote(resultPath)}\nDone sentinel: ${shellQuote(donePath)}\n\n'; ${kiroCommand}`;
+  const hasSession = run(binary, ['has-session', '-t', session]);
+  if (hasSession.status !== 0) {
+    const created = run(binary, ['new-session', '-d', '-s', session, '-n', 'omk']);
+    if (created.status !== 0) {
+      const error = new Error(`tmux interactive session creation failed: ${created.stderr || created.stdout}`);
+      error.exitCode = 1;
+      throw error;
+    }
+  }
+  const newWindow = run(binary, ['new-window', '-t', session, '-n', window, shellCommand], { cwd: root });
+  if (newWindow.status !== 0) {
+    const error = new Error(`tmux interactive Kiro window failed: ${newWindow.stderr || newWindow.stdout}`);
+    error.exitCode = 1;
+    throw error;
+  }
+  const target = `${session}:${window}`;
+  const switchResult = process.env.TMUX ? run(binary, ['switch-client', '-t', target], { stdio: 'inherit' }) : run(binary, ['attach-session', '-t', target], { stdio: 'inherit' });
+  recordSession(root, { workflowId: workflow.id, stage: 'interactive-handoff', session, window, pane: target, mode: 'interactive-kiro', launchedAt: new Date().toISOString(), command: shellCommand });
+  return { launched: true, attached: switchResult.status === 0, target, command: shellCommand, exitCode: switchResult.status };
 }
 
 export function buildWorkflowSummary(root, workflow, { failedStage = null, recoveryCommand = null } = {}) {

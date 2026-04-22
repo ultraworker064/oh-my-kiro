@@ -1,5 +1,5 @@
 const BOOLEAN_FLAGS = new Set(['dry-run', 'no-tmux', 'no-attach', 'attach', 'force', 'resume', 'skip-kiro-install', 'help']);
-const VALUE_FLAGS = new Set(['cwd', 'workflow-id', 'kiro-bin', 'tmux-bin', 'timeout-ms']);
+const VALUE_FLAGS = new Set(['cwd', 'workflow-id', 'kiro-bin', 'tmux-bin', 'timeout-ms', 'interactive-handoff-timeout-ms', 'handoff-file']);
 
 export function parseArgs(argv) {
   const [commandRaw, ...rest] = argv;
@@ -51,8 +51,10 @@ Options:
   --kiro-bin <path>     Use an explicit Kiro CLI binary
   --tmux-bin <path>     Use an explicit tmux binary
   --no-tmux             Run wrapper directly while preserving artifacts/evidence
-  --no-attach           Do not open/switch/attach to the tmux summary view
-  --attach              Force tmux summary view even in non-TTY contexts
+  --no-attach           Do not open/switch/attach to interactive or summary tmux views
+  --attach              Force interactive Kiro and summary views even in non-TTY contexts
+  --interactive-handoff-timeout-ms <n>  Timeout while waiting for interactive handoff
+  --handoff-file <path> Use an existing handoff result artifact
   --dry-run             Show setup actions without mutating install state
   --force               Allow overwriting completed stage artifacts or managed setup files
 `;

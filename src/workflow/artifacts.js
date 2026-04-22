@@ -40,6 +40,22 @@ export function wrapperResultPath(root, workflowId, stage) {
   return path.join(workflowDir(root, workflowId), 'evidence', `${stage}.wrapper-result.json`);
 }
 
+export function handoffDir(root, workflowId) {
+  return path.join(workflowDir(root, workflowId), 'handoff');
+}
+
+export function interactivePromptPath(root, workflowId) {
+  return path.join(handoffDir(root, workflowId), 'interactive-prompt.md');
+}
+
+export function interactiveResultPath(root, workflowId) {
+  return path.join(handoffDir(root, workflowId), 'interactive-result.md');
+}
+
+export function interactiveDonePath(root, workflowId) {
+  return path.join(handoffDir(root, workflowId), 'done');
+}
+
 export function inferWorkflowIdFromArtifact(file) {
   const resolved = path.resolve(file);
   const parts = resolved.split(path.sep);

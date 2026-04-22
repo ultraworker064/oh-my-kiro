@@ -67,3 +67,30 @@ Verify the execution. Produce a verification artifact with:
       throw new Error(`Unknown stage: ${stage}`);
   }
 }
+
+
+export function buildInteractiveHandoffPrompt({ task, resultPath, donePath }) {
+  return `${GLOBAL}
+# Interactive omk handoff
+
+You are the visible interactive Kiro CLI session for this omk workflow.
+
+User's starting task:
+${task}
+
+Chat with the user until the request is clear. When the user is ready for omk to run background jobs, write the final agreed result to:
+${resultPath}
+
+Then create/touch this done sentinel:
+${donePath}
+
+The result file should include:
+- Final clarified task
+- Constraints
+- Non-goals
+- Acceptance criteria
+- Notes needed for background plan/execute/verify
+
+If Kiro cannot write files directly in this environment, clearly instruct the user to create those files manually in another shell, then detach from tmux with Ctrl-b d.
+`;
+}

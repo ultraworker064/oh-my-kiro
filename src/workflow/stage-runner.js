@@ -1,10 +1,10 @@
 import path from 'node:path';
 import { STAGES } from '../config/defaults.js';
-import { writeJson, readJson } from '../state/store.js';
-import { buildPrompt } from '../prompts/templates.js';
+import { writeJson, readJson, pathExists, readText, writeText } from '../state/store.js';
+import { buildPrompt, buildInteractiveHandoffPrompt } from '../prompts/templates.js';
 import { runStageWrapper } from '../kiro/stage-wrapper.js';
-import { runStageInTmux, recordSession, sessionName, showWorkflowSummaryInTmux } from '../tmux/tmux-manager.js';
-import { artifactPath, assertCanWriteArtifact, createWorkflow, evidencePath, inferWorkflowIdFromArtifact, loadWorkflow, promptPath, saveWorkflow, stderrPath, stdoutPath, wrapperConfigPath, wrapperResultPath, writePrompt } from './artifacts.js';
+import { runStageInTmux, recordSession, sessionName, showWorkflowSummaryInTmux, shouldAttachToTmux, launchInteractiveKiroInTmux } from '../tmux/tmux-manager.js';
+import { artifactPath, assertCanWriteArtifact, createWorkflow, evidencePath, inferWorkflowIdFromArtifact, loadWorkflow, promptPath, saveWorkflow, stderrPath, stdoutPath, wrapperConfigPath, wrapperResultPath, writePrompt, interactivePromptPath, interactiveResultPath, interactiveDonePath } from './artifacts.js';
 import { markStage } from './state-machine.js';
 import { finalizeVerificationArtifact } from '../verify/local-verifier.js';
 
@@ -103,9 +103,15 @@ export function runStage(root, stage, input, options = {}) {
 export function runWorkflow(root, task, options = {}) {
   let input = task;
   let workflow = options.workflowId ? loadWorkflow(root, options.workflowId) : null;
-  const startStage = options.resume && workflow ? firstPendingStage(workflow) : 'clarify';
+  const useInteractiveHandoff = !options.resume && !options.handoffFile && shouldAttachToTmux({ attach: options.attach, noAttach: options.noAttach, noTmux: options.noTmux });
+  const startStage = options.resume && workflow ? firstPendingStage(workflow) : (useInteractiveHandoff || options.handoffFile ? 'plan' : 'clarify');
   let started = false;
   try {
+    if (useInteractiveHandoff || options.handoffFile) {
+      const handoff = prepareInteractiveHandoff(root, task, { ...options, workflow });
+      workflow = handoff.workflow;
+      input = handoff.clarifyArtifact;
+    }
     for (const stage of STAGES) {
       if (stage === startStage) started = true;
       if (!started) continue;
@@ -130,6 +136,42 @@ export function runWorkflow(root, task, options = {}) {
     }
     throw error;
   }
+}
+
+export function prepareInteractiveHandoff(root, task, options = {}) {
+  const workflow = options.workflow ?? createWorkflow(root, task, options.workflowId);
+  const resultPath = options.handoffFile ? path.resolve(root, options.handoffFile) : interactiveResultPath(root, workflow.id);
+  const donePath = interactiveDonePath(root, workflow.id);
+  const promptFile = interactivePromptPath(root, workflow.id);
+  const prompt = buildInteractiveHandoffPrompt({ task, resultPath, donePath });
+  writeText(promptFile, prompt);
+  if (!options.handoffFile) {
+    launchInteractiveKiroInTmux({ root, workflow, task, promptPath: promptFile, resultPath, donePath, kiroBin: options.kiroBin, tmuxBin: options.tmuxBin, attach: options.attach, noAttach: options.noAttach, noTmux: options.noTmux });
+    waitForHandoff(resultPath, donePath, options.interactiveHandoffTimeoutMs ?? options.timeoutMs ?? 120000, workflow.id);
+  } else if (!pathExists(resultPath)) {
+    const error = new Error(`Handoff file not found: ${resultPath}`);
+    error.hint = `Recovery: create ${resultPath}, then run omk workflow --workflow-id ${workflow.id} --resume`;
+    error.exitCode = 1;
+    throw error;
+  }
+  const clarifyArtifact = artifactPath(root, workflow.id, 'clarify');
+  writeText(clarifyArtifact, readText(resultPath));
+  markStage(workflow, 'clarify', 'running', { promptPath: promptFile }, { force: true });
+  markStage(workflow, 'clarify', 'completed', { artifactPath: clarifyArtifact, evidencePath: resultPath, error: null });
+  saveWorkflow(root, workflow);
+  return { workflow, clarifyArtifact, resultPath, donePath, promptFile };
+}
+
+function waitForHandoff(resultPath, donePath, timeoutMs, workflowId) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (pathExists(resultPath) && pathExists(donePath)) return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  }
+  const error = new Error(`Timed out waiting for interactive Kiro handoff: ${resultPath}`);
+  error.hint = `Recovery: create ${resultPath} and ${donePath}, then run omk workflow --workflow-id ${workflowId} --resume`;
+  error.exitCode = 1;
+  throw error;
 }
 
 function firstPendingStage(workflow) {

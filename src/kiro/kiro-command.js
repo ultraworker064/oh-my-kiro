@@ -19,6 +19,10 @@ export function resolveKiroBinary({ root = process.cwd(), kiroBin } = {}) {
   return null;
 }
 
+export function buildInteractiveKiroArgs({ prompt }) {
+  return prompt ? ['chat', prompt] : ['chat'];
+}
+
 export function buildKiroArgs({ stage, prompt, trustTools = null }) {
   const args = ['chat', '--no-interactive', '--agent', STAGE_TO_AGENT[stage] ?? `omk-${stage}`];
   if (trustTools) args.push('--trust-tools', trustTools);

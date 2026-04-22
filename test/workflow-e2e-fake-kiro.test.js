@@ -49,7 +49,7 @@ test('resume after failed plan retries plan and completes workflow', () => {
 
 test('failed workflow prints recovery command', () => {
   const root = tempProject();
-  const result = spawnSync('node', [bin, 'workflow', 'task', '--cwd', root, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux], {
+  const result = spawnSync('node', [bin, 'workflow', 'task', '--cwd', root, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux, '--no-attach'], {
     cwd: repoRoot,
     encoding: 'utf8',
     env: { ...process.env, FAKE_KIRO_FAIL_STAGE: 'execute' },
@@ -66,19 +66,42 @@ test('bare workflow resume requires workflow id and does not create workflow', (
   assert.equal(fs.existsSync(`${root}/.omk/workflows`), false);
 });
 
-test('failed first stage forced attach writes visible recovery summary', () => {
+test('missing interactive handoff times out with recovery guidance', () => {
   const root = tempProject();
-  const result = spawnSync('node', [bin, 'workflow', 'task', '--cwd', root, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux, '--attach'], {
+  const result = spawnSync('node', [bin, 'workflow', 'task', '--cwd', root, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux, '--attach', '--interactive-handoff-timeout-ms', '50'], {
     cwd: repoRoot,
     encoding: 'utf8',
-    env: { ...process.env, FAKE_KIRO_FAIL_STAGE: 'clarify' },
   });
   assert.notEqual(result.status, 0);
-  const workflowId = result.stderr.match(/--workflow-id\s+([^\s]+)\s+--resume/)?.[1];
-  assert.ok(workflowId);
-  const summaryPath = `${root}/.omk/workflows/${workflowId}/summary.md`;
-  assert.ok(fs.existsSync(summaryPath));
-  const summary = fs.readFileSync(summaryPath, 'utf8');
-  assert.match(summary, /Failed stage: clarify/);
-  assert.match(summary, /Recovery: omk workflow --workflow-id .* --resume/);
+  assert.match(result.stderr, /Timed out waiting for interactive Kiro handoff/);
+  assert.match(result.stderr, /Recovery: create .*interactive-result.md.*done/);
+});
+
+test('interactive handoff launches Kiro first then runs background stages', () => {
+  const root = tempProject();
+  const log = `${root}/fake-tmux.log`;
+  const result = spawnSync('node', [bin, 'workflow', 'interactive task', '--cwd', root, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux, '--attach', '--interactive-handoff-timeout-ms', '5000'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: { ...process.env, FAKE_KIRO_INTERACTIVE_HANDOFF: '1', FAKE_TMUX_LOG: log },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const workflowDir = result.stdout.trim().split('\n').at(-1);
+  const tmuxLog = fs.readFileSync(log, 'utf8');
+  assert.match(tmuxLog, /new-window .*kiro-/);
+  assert.match(tmuxLog, new RegExp(fakeKiro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(tmuxLog, /new-window .*plan-/);
+  assert.ok(fs.existsSync(`${workflowDir}/handoff/interactive-result.md`));
+  assert.match(fs.readFileSync(`${workflowDir}/clarify.md`, 'utf8'), /Final clarified task from fake interactive Kiro/);
+  assert.match(fs.readFileSync(`${workflowDir}/summary.md`, 'utf8'), /Final verdict: PASS/);
+});
+
+test('explicit handoff file skips interactive launch and feeds background stages', () => {
+  const root = tempProject();
+  const handoff = `${root}/handoff.md`;
+  fs.writeFileSync(handoff, '# supplied handoff\n');
+  const result = spawnSync('node', [bin, 'workflow', 'task', '--cwd', root, '--handoff-file', handoff, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux], { cwd: repoRoot, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const workflowDir = result.stdout.trim().split('\n').at(-1);
+  assert.match(fs.readFileSync(`${workflowDir}/clarify.md`, 'utf8'), /supplied handoff/);
 });
