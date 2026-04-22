@@ -1,28 +1,47 @@
-# Milestone 1 Architecture
+# OMK Workflow Architecture
 
-`omk` is a dependency-light Node.js CLI sidecar around Kiro CLI.
+`omk` is a Kiro-backed workflow orchestrator modeled after the main `oh-my-codex` flow.
+
+## Public workflow
+
+```bash
+omk deep-interview "<task>"
+omk ralplan .omk/specs/deep-interview-<slug>.md
+omk ralph .omk/plans/prd-<slug>.md
+```
+
+The old `clarify -> plan -> execute -> verify` command model is removed from the public product surface.
 
 ## Boundary
 
 - Kiro CLI performs model/chat work.
-- `omk` performs orchestration, tmux management, prompt generation, state persistence, and evidence capture.
-- MCP and internet are not required for `omk` workflow operation.
+- `omk` manages mode/session state, tmux metadata, prompts, and artifacts.
+- Artifacts live under `.omk/` and are the durable source of truth.
+- Terminal output is a short operator summary and next command.
 
-## Stage execution
+## Mode lifecycle
 
-1. CLI command parses user input or prior artifact path.
-2. Workflow state is created or loaded from `.omk/workflows/<id>/workflow.json`.
-3. A stage prompt is written under `.omk/workflows/<id>/prompts/`.
-4. `omk` launches a Node stage wrapper through a managed tmux session/window unless `--no-tmux` is used.
-5. The wrapper invokes `kiro-cli chat --no-interactive --agent <stage-agent> <prompt>`.
-6. stdout/stderr/evidence are written under `.omk/workflows/<id>/`.
-7. The stage artifact path is printed for independent chaining.
-8. For interactive `omk workflow` runs, `omk` first opens/switches/attaches to a tmux window running real `kiro-cli`. The user chats with Kiro and completes an explicit handoff under `.omk/workflows/<id>/handoff/`; `omk` then runs background plan/execute/verify and writes a final `summary.md` artifact in a tmux summary window. Non-TTY, CI, `--no-attach`, `OMK_NO_ATTACH=1`, and `--no-tmux` keep background behavior.
+Each mode writes `.omk/state/<mode>-state.json` and `.omk/sessions/<session-id>/session.json`.
 
-## Setup
+State phases use a small OMX-inspired subset:
 
-`omk setup` detects `kiro-cli`/`kiro`, or runs the official Kiro installer when missing. It also writes minimal `.kiro/steering/` and `.kiro/agents/` files for M1 stage prompts.
+```text
+running -> complete | cancelled | failed | blocked_on_user
+```
+
+Supported mode transitions:
+
+```text
+deep-interview -> ralplan
+ralplan -> ralph
+```
+
+## Commands
+
+- `omk status` lists known mode states and artifact paths.
+- `omk resume <mode-or-session>` prints the tmux attach/recovery command when metadata is available.
+- `omk cancel <mode-or-session>` marks state cancelled and preserves artifacts.
 
 ## Testing boundary
 
-Fake Kiro/tmux fixtures cover deterministic workflow behavior. Real Kiro automated tests only check invocation/help behavior; semantic Kiro workflow validation is manual.
+Automated tests use fake Kiro/fake tmux fixtures. Real Kiro CLI behavior is validated manually in a user environment with Kiro installed.

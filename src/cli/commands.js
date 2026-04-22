@@ -1,9 +1,19 @@
-import path from 'node:path';
 import { parseArgs, usage } from './args.js';
 import { projectRoot } from '../state/store.js';
-import { runStage, runWorkflow } from '../workflow/stage-runner.js';
 import { setupKiro, doctor } from '../setup/kiro-install.js';
 import { setupSteering } from '../setup/kiro-steering.js';
+import { runDeepInterview } from '../modes/deep-interview.js';
+import { runRalplan } from '../modes/ralplan.js';
+import { runRalph } from '../modes/ralph.js';
+import { cancelMode, listModeStates, resolveModeOrSession } from '../state/mode-state.js';
+
+const REMOVED_COMMANDS = {
+  clarify: 'deep-interview "<task>"',
+  plan: 'ralplan <artifact-or-task>',
+  execute: 'ralph <plan-or-task>',
+  verify: 'ralph <plan-or-task>',
+  workflow: 'deep-interview "<task>" -> ralplan <spec> -> ralph <plan>',
+};
 
 export async function runCli(argv) {
   const { command, options, positionals } = parseArgs(argv);
@@ -11,6 +21,11 @@ export async function runCli(argv) {
   if (!command || command === 'help' || command === '--help' || command === '-h') {
     console.log(usage());
     return;
+  }
+  if (REMOVED_COMMANDS[command]) {
+    const error = new Error(`omk ${command} has been removed. Use omk ${REMOVED_COMMANDS[command]} instead.`);
+    error.exitCode = 1;
+    throw error;
   }
   if (command === 'setup') {
     const result = setupKiro(root, options);
@@ -22,44 +37,55 @@ export async function runCli(argv) {
     return;
   }
   if (command === 'doctor') {
-    const result = doctor(root, options);
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(doctor(root, options), null, 2));
     return;
   }
-  if (['clarify', 'plan', 'execute', 'verify'].includes(command)) {
-    const input = positionals[0];
-    if (!input) {
-      const error = new Error(command === 'clarify' ? 'clarify requires a task string' : `${command} requires a prior stage artifact path`);
-      error.exitCode = 1;
-      throw error;
-    }
-    const result = runStage(root, command, pathMaybe(root, input), options);
-    console.log(result.artifactPath);
-    return;
-  }
-  if (command === 'workflow') {
+  if (command === 'deep-interview') {
     const task = positionals.join(' ').trim();
-    if (options.resume && !options.workflowId) {
-      const error = new Error('workflow --resume requires --workflow-id <id>');
-      error.hint = 'Recovery: omk workflow --workflow-id <id> --resume';
-      error.exitCode = 1;
-      throw error;
-    }
-    if (!task && !options.resume) {
-      const error = new Error('workflow requires a task string, or --resume with --workflow-id');
-      error.exitCode = 1;
-      throw error;
-    }
-    const result = runWorkflow(root, task, options);
-    console.log(result.workflowDir);
+    if (!task) throw usageError('deep-interview requires a task string');
+    const result = runDeepInterview(root, task, options);
+    console.log(`✅ Deep interview complete\nSpec: ${result.spec}\nInterview: ${result.interview}\nSession: ${result.sessionId}\nNext: omk ralplan ${result.spec}`);
     return;
   }
-  const error = new Error(`Unknown command: ${command}\n${usage()}`);
-  error.exitCode = 1;
-  throw error;
+  if (command === 'ralplan') {
+    const input = positionals.join(' ').trim();
+    if (!input) throw usageError('ralplan requires a task or deep-interview artifact');
+    const result = runRalplan(root, input, options);
+    console.log(`✅ Plan complete\nPRD: ${result.prd}\nTest spec: ${result.testSpec}\nSession: ${result.sessionId}\nNext: omk ralph ${result.prd}`);
+    return;
+  }
+  if (command === 'ralph') {
+    const input = positionals.join(' ').trim();
+    if (!input) throw usageError('ralph requires a task or plan artifact');
+    const result = runRalph(root, input, options);
+    console.log(`✅ Ralph complete\nProgress: ${result.progress}\nVerification: ${result.verification}\nChanged files: ${result.changedFiles}\nSession: ${result.sessionId}`);
+    return;
+  }
+  if (command === 'status') {
+    const states = listModeStates(root);
+    if (states.length === 0) console.log('No omk mode sessions found.');
+    else for (const state of states) console.log(`${state.mode}\t${state.current_phase}\tactive=${state.active}\tsession=${state.session_id}\tartifacts=${(state.artifact_paths || []).join(',')}`);
+    return;
+  }
+  if (command === 'resume') {
+    const target = positionals[0];
+    const state = resolveModeOrSession(root, target);
+    const pane = state.kiro?.pane || state.kiro?.target;
+    const session = state.kiro?.session;
+    console.log(pane || session ? `Resume: tmux attach-session -t ${pane || session}` : `No tmux metadata for ${target}. Re-run omk ${state.mode} with the original input.`);
+    return;
+  }
+  if (command === 'cancel') {
+    const target = positionals[0];
+    const state = cancelMode(root, target);
+    console.log(`Cancelled ${state.mode} (${state.session_id}); artifacts preserved.`);
+    return;
+  }
+  throw usageError(`Unknown command: ${command}\n${usage()}`);
 }
 
-function pathMaybe(root, input) {
-  if (input.includes('/') || input.endsWith('.md')) return path.resolve(root, input);
-  return input;
+function usageError(message) {
+  const error = new Error(message);
+  error.exitCode = 1;
+  return error;
 }

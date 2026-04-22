@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { loadConfig } from '../state/store.js';
-import { STAGE_TO_AGENT } from '../config/defaults.js';
+import { MODE_TO_AGENT } from '../config/defaults.js';
 
 export function commandExists(command, cwd = process.cwd()) {
   if (!command) return false;
@@ -24,7 +24,7 @@ export function buildInteractiveKiroArgs({ prompt }) {
 }
 
 export function buildKiroArgs({ stage, prompt, trustTools = null }) {
-  const args = ['chat', '--no-interactive', '--agent', STAGE_TO_AGENT[stage] ?? `omk-${stage}`];
+  const args = ['chat', '--no-interactive', '--agent', MODE_TO_AGENT[stage] ?? `omk-${stage}`];
   if (trustTools) args.push('--trust-tools', trustTools);
   args.push(prompt);
   return args;
