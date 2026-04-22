@@ -65,3 +65,20 @@ test('bare workflow resume requires workflow id and does not create workflow', (
   assert.match(result.stderr, /workflow --resume requires --workflow-id/);
   assert.equal(fs.existsSync(`${root}/.omk/workflows`), false);
 });
+
+test('failed first stage forced attach writes visible recovery summary', () => {
+  const root = tempProject();
+  const result = spawnSync('node', [bin, 'workflow', 'task', '--cwd', root, '--kiro-bin', fakeKiro, '--tmux-bin', fakeTmux, '--attach'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: { ...process.env, FAKE_KIRO_FAIL_STAGE: 'clarify' },
+  });
+  assert.notEqual(result.status, 0);
+  const workflowId = result.stderr.match(/--workflow-id\s+([^\s]+)\s+--resume/)?.[1];
+  assert.ok(workflowId);
+  const summaryPath = `${root}/.omk/workflows/${workflowId}/summary.md`;
+  assert.ok(fs.existsSync(summaryPath));
+  const summary = fs.readFileSync(summaryPath, 'utf8');
+  assert.match(summary, /Failed stage: clarify/);
+  assert.match(summary, /Recovery: omk workflow --workflow-id .* --resume/);
+});

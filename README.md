@@ -22,6 +22,8 @@ node bin/omk.js verify .omk/workflows/<id>/execute.md
 node bin/omk.js workflow "<task>"
 ```
 
+By default, when `omk workflow` runs in an interactive TTY, it opens a managed tmux summary view at the end so you can see what was done. Use `--no-attach` or `OMK_NO_ATTACH=1` to keep the detached/background behavior. CI, tests, and non-TTY runs skip attach automatically. `--no-tmux` still bypasses tmux entirely.
+
 Support commands:
 
 ```bash

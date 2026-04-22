@@ -17,6 +17,7 @@
 5. The wrapper invokes `kiro-cli chat --no-interactive --agent <stage-agent> <prompt>`.
 6. stdout/stderr/evidence are written under `.omk/workflows/<id>/`.
 7. The stage artifact path is printed for independent chaining.
+8. For interactive `omk workflow` runs, `omk` writes a `summary.md` artifact and opens/switches/attaches to a tmux summary window showing workflow id, stage statuses, artifact/evidence paths, final result, and recovery command when applicable. Non-TTY, CI, `--no-attach`, `OMK_NO_ATTACH=1`, and `--no-tmux` keep background behavior.
 
 ## Setup
 

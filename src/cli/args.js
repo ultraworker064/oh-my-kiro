@@ -1,4 +1,4 @@
-const BOOLEAN_FLAGS = new Set(['dry-run', 'no-tmux', 'force', 'resume', 'skip-kiro-install', 'help']);
+const BOOLEAN_FLAGS = new Set(['dry-run', 'no-tmux', 'no-attach', 'attach', 'force', 'resume', 'skip-kiro-install', 'help']);
 const VALUE_FLAGS = new Set(['cwd', 'workflow-id', 'kiro-bin', 'tmux-bin', 'timeout-ms']);
 
 export function parseArgs(argv) {
@@ -43,7 +43,7 @@ Usage:
   omk plan <clarify-artifact> [--kiro-bin <path>] [--tmux-bin <path>] [--no-tmux]
   omk execute <plan-artifact> [--kiro-bin <path>] [--tmux-bin <path>] [--no-tmux]
   omk verify <execution-artifact> [--kiro-bin <path>] [--tmux-bin <path>] [--no-tmux]
-  omk workflow "<task>" [--workflow-id <id>] [--resume] [--kiro-bin <path>] [--tmux-bin <path>] [--no-tmux]
+  omk workflow "<task>" [--workflow-id <id>] [--resume] [--kiro-bin <path>] [--tmux-bin <path>] [--no-tmux] [--no-attach]
 
 Options:
   --cwd <path>          Run against a project directory (default: current directory)
@@ -51,6 +51,8 @@ Options:
   --kiro-bin <path>     Use an explicit Kiro CLI binary
   --tmux-bin <path>     Use an explicit tmux binary
   --no-tmux             Run wrapper directly while preserving artifacts/evidence
+  --no-attach           Do not open/switch/attach to the tmux summary view
+  --attach              Force tmux summary view even in non-TTY contexts
   --dry-run             Show setup actions without mutating install state
   --force               Allow overwriting completed stage artifacts or managed setup files
 `;

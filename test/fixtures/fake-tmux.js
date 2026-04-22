@@ -2,6 +2,9 @@
 import { spawnSync } from 'node:child_process';
 const args = process.argv.slice(2);
 const cmd = args[0];
+if (process.env.FAKE_TMUX_LOG) {
+  await import('node:fs').then(({ appendFileSync }) => appendFileSync(process.env.FAKE_TMUX_LOG, `${args.join(' ')}\n`));
+}
 if (cmd === '-V') {
   console.log('tmux fake-1.0');
   process.exit(0);
@@ -19,5 +22,6 @@ if (cmd === 'new-window') {
   // result is recorded by the wrapper evidence file.
   process.exit(0);
 }
+if (cmd === 'attach-session' || cmd === 'switch-client') process.exit(0);
 if (cmd === 'capture-pane') process.exit(0);
 process.exit(0);
